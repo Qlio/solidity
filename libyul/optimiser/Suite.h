@@ -32,6 +32,13 @@
 #include <string_view>
 #include <memory>
 
+#undef OUTPUT_PERFORMANCE_METRICS
+//#define OUTPUT_PERFORMANCE_METRICS 1
+
+#ifdef OUTPUT_PERFORMANCE_METRICS
+#include <chrono>
+#endif
+
 namespace solidity::yul
 {
 
@@ -87,6 +94,9 @@ public:
 private:
 	OptimiserStepContext& m_context;
 	Debug m_debug;
+#ifdef OUTPUT_PERFORMANCE_METRICS
+	std::map<std::string, int64_t> m_durationPerStepInMicroseconds;
+#endif
 };
 
 }

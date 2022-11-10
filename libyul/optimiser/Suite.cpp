@@ -87,6 +87,41 @@ using namespace std;
 using namespace solidity;
 using namespace solidity::yul;
 
+namespace
+{
+
+#ifdef OUTPUT_PERFORMANCE_METRICS
+void outputPerformanceMetrics(map<string, int64_t> const& _metrics)
+{
+	vector<pair<string, int64_t>> durations(_metrics.begin(), _metrics.end());
+	sort(
+		durations.begin(),
+		durations.end(),
+		[](pair<string, int64_t> const& _lhs, pair<string, int64_t> const& _rhs) -> bool
+		{
+			return _lhs.second < _rhs.second;
+		}
+	);
+	int64_t total = 0;
+	for (auto&& [step, count]: durations)
+		total += count;
+
+	cerr << "Performance metrics of optimizer steps" << endl;
+	cerr << "======================================" << endl;
+	for (auto&& [step, count]: durations)
+	{
+		double percentage = 100.0 * static_cast<double>(count) / static_cast<double>(total);
+		double sec = static_cast<double>(count) / 1000000.0;
+		cerr << setw(7) << setprecision(3) << percentage << "% (" << sec << " s): " << step << endl;
+	}
+	cerr << "--------------------------------------" << endl;
+	cerr << setw(7) << setprecision(3) << 100 << "% (" << (static_cast<double>(total) / 1000000.0) << " s) " << endl;
+}
+#endif
+
+}
+
+
 void OptimiserSuite::run(
 	Dialect const& _dialect,
 	GasMeter const* _meter,
@@ -178,12 +213,15 @@ void OptimiserSuite::run(
 	NameSimplifier::run(suite.m_context, ast);
 	VarNameCleaner::run(suite.m_context, ast);
 
+#ifdef OUTPUT_PERFORMANCE_METRICS
+	outputPerformanceMetrics(suite.m_durationPerStepInMicroseconds);
+#endif
+
 	*_object.analysisInfo = AsmAnalyzer::analyzeStrictAssertCorrect(_dialect, _object);
 }
 
 namespace
 {
-
 
 template <class... Step>
 map<string, unique_ptr<OptimiserStep>> optimiserStepCollection()
@@ -445,7 +483,14 @@ void OptimiserSuite::runSequence(std::vector<string> const& _steps, Block& _ast)
 	{
 		if (m_debug == Debug::PrintStep)
 			cout << "Running " << step << endl;
+#ifdef OUTPUT_PERFORMANCE_METRICS
+		chrono::steady_clock::time_point startTime = chrono::steady_clock::now();
+#endif
 		allSteps().at(step)->run(m_context, _ast);
+#ifdef OUTPUT_PERFORMANCE_METRICS
+		chrono::steady_clock::time_point endTime = chrono::steady_clock::now();
+		m_durationPerStepInMicroseconds[step] += std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
+#endif
 		if (m_debug == Debug::PrintChanges)
 		{
 			// TODO should add switch to also compare variable names!
